@@ -10,95 +10,115 @@ import SwiftUI
 // MARK: - CountdownDetailView
 
 struct CountdownDetailView: View {
-    let event: CountdownEvent // Событие, для которого мы показываем отсчет
+    let event: CountdownEvent
     
-    // @State для хранения оставшегося времени, будет обновляться каждую секунду
     @State private var remainingTime: TimeInterval = 0
+    // Общее время от создания до целевой даты
+    @State private var totalDuration: TimeInterval = 0
     
-    // TimerPublisher для обновления UI каждую секунду
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        VStack(spacing: 20) { // Вертикальный стек для размещения элементов
-            Spacer() // Отталкивает содержимое вниз
+        VStack(spacing: 20) {
+            Spacer()
             
             Text(event.name)
-                .font(.largeTitle) // Крупный заголовок для названия события
+                .font(.largeTitle)
                 .fontWeight(.bold)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             
-            // Отображение оставшегося времени
-            Text(formattedRemainingTime)
-                .font(.system(size: 60, weight: .bold, design: .rounded)) // Очень крупный шрифт
-                .minimumScaleFactor(0.5) // Позволяет тексту уменьшаться, если он слишком длинный
-                .lineLimit(1)
-                .foregroundColor(remainingTime <= 0 ? .red : .accentColor) // Красный, если время вышло
-                .padding(.horizontal)
-            
-            Text("осталось")
-                .font(.title2)
-                .foregroundColor(.gray)
-            
-            Spacer() // Отталкивает содержимое вверх
+            // --- НОВОЕ: Круговой индикатор прогресса и текст времени ---
+            if remainingTime <= 0 {
+                Text("Время вышло!")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .foregroundColor(.red)
+            } else {
+                VStack {
+                    // Вычисляем progress: сколько % времени УЖЕ ПРОШЛО
+                    // Это inverseProgress, так как remainingTime - это сколько осталось.
+                    // progress = (totalDuration - remainingTime) / totalDuration
+                    let currentProgress = (totalDuration - remainingTime) / totalDuration
+                    
+                    CircularProgressView(
+                        progress: currentProgress,
+                        lineWidth: 20, // Толщина линии прогресса
+                        accentColor: progressColor, // Цвет будет зависеть от оставшегося времени
+                        backgroundColor: .gray.opacity(0.3)
+                    )
+                    .frame(width: 250, height: 250) // Размер круга
+                    .overlay( // Накладываем текст на круг
+                        VStack {
+                            Text(formattedTimeRemainingString) // Основной текст таймера
+                                .font(.system(size: 45, weight: .bold, design: .rounded))
+                                .minimumScaleFactor(0.5)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.center)
+                            Text("осталось")
+                                .font(.title3)
+                                .foregroundColor(.gray)
+                        }
+                    )
+                }
+            }
+            // --- КОНЕЦ НОВОГО БЛОКА ---
+
+            Spacer()
         }
-        .navigationTitle("Отсчет") // Заголовок экрана
+        .navigationTitle("Отсчет")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear(perform: setupTimer) // Запускаем таймер при появлении
-        .onReceive(timer) { _ in // Обрабатываем каждое срабатывание таймера
+        .onAppear(perform: setupTimer)
+        .onReceive(timer) { _ in
             updateRemainingTime()
         }
     }
 
-    // MARK: - Методы
+    // MARK: - Вычисляемые свойства и методы
 
-    private func setupTimer() {
-        updateRemainingTime() // Инициализируем время сразу при появлении
-    }
-
-    private func updateRemainingTime() {
-        let now = Date()
-        // Вычисляем разницу во времени в секундах
-        let newRemainingTime = event.targetDate.timeIntervalSince(now)
-        
-        // Обновляем @State переменную, что вызовет перерисовку UI
-        remainingTime = max(0, newRemainingTime) // Гарантируем, что время не уйдет в минус
-    }
-
-    // Вычисляемое свойство для форматирования оставшегося времени
-    private var formattedRemainingTime: String {
-        guard remainingTime > 0 else {
-            return "Время вышло!"
+    private var progressColor: Color {
+        // Меняем цвет в зависимости от оставшегося времени
+        if remainingTime < 3600 * 24 { // Меньше 24 часов
+            return .red
+        } else if remainingTime < 3600 * 24 * 7 { // Меньше 7 дней
+            return .orange
+        } else {
+            return .accentColor // По умолчанию
         }
+    }
 
+    private var formattedTimeRemainingString: String {
+        guard remainingTime > 0 else { return "" } // Если время вышло, текст будет пустой, отобразится "Время вышло!"
+        
         let days = Int(remainingTime / (3600 * 24))
         let hours = Int((remainingTime.truncatingRemainder(dividingBy: (3600 * 24))) / 3600)
         let minutes = Int((remainingTime.truncatingRemainder(dividingBy: 3600)) / 60)
         let seconds = Int(remainingTime.truncatingRemainder(dividingBy: 60))
 
         if days > 0 {
-            return String(format: "%d д %02d ч %02d м", days, hours, minutes)
+            return String(format: "%d дн\n%02d ч %02d м", days, hours, minutes)
         } else if hours > 0 {
-            return String(format: "%02d ч %02d м %02d с", hours, minutes, seconds)
+            return String(format: "%02d ч %02d м\n%02d с", hours, minutes, seconds)
         } else if minutes > 0 {
             return String(format: "%02d м %02d с", minutes, seconds)
         } else {
             return String(format: "%02d с", seconds)
         }
     }
-}
 
-// MARK: - Предварительный просмотр
+    private func setupTimer() {
+        // Вычисляем общую продолжительность отсчета ОДИН РАЗ
+        totalDuration = event.targetDate.timeIntervalSince(event.creationDate)
+        // Убеждаемся, что totalDuration не отрицательна, если вдруг creationDate оказалась позже targetDate
+        if totalDuration < 0 { totalDuration = 0 }
 
-struct CountdownDetailView_Previews: PreviewProvider {
-    static var previews: some View {
-        // Пример события для предварительного просмотра (через 5 дней и 10 часов)
-        let futureDate = Calendar.current.date(byAdding: .day, value: 5, to: Date())!
-            .addingTimeInterval(3600 * 10)
-        let sampleEvent = CountdownEvent(name: "Долгожданный Отпуск", targetDate: futureDate)
-        
-        NavigationView { // Для правильного отображения NavigationTitle
-            CountdownDetailView(event: sampleEvent)
-        }
+        updateRemainingTime()
+    }
+
+    private func updateRemainingTime() {
+        let now = Date()
+        let newRemainingTime = event.targetDate.timeIntervalSince(now)
+        remainingTime = max(0, newRemainingTime)
     }
 }
+

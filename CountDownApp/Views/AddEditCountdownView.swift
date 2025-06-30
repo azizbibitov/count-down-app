@@ -84,20 +84,16 @@ struct AddEditCountdownView: View {
             return
         }
         
-        // Текущая дата и время, включая минуты и секунды
         let now = Date()
         
-        // Округляем targetDate до минуты, чтобы избежать проблем с точностью сравнения.
-        // Или можно сравнивать только даты без времени, если секунды не важны.
-        // Для обратного отсчета лучше быть точными.
-        // Если пользователь может выбрать время в прошлом, то стоит это учесть.
+        // Проверка, что целевая дата не в прошлом
         if targetDate < now {
             alertMessage = "Дата и время события не могут быть в прошлом."
             showingAlert = true
             return
         }
         
-        var event: CountdownEvent
+        var event: CountdownEvent // Должна быть var, чтобы можно было изменить event.id после сохранения
         if isEditing {
             guard var existingEvent = eventToEdit else { return }
             existingEvent.name = trimmedName
@@ -108,30 +104,17 @@ struct AddEditCountdownView: View {
         }
         
         do {
-            try DatabaseManager.shared.save(event: &event)
+            // ОДНОКРАТНОЕ СОХРАНЕНИЕ:
+            try DatabaseManager.shared.save(event: &event) // Здесь `event` должен быть `inout` или `var`
             
-            print("Событие сохранено: \(event.name) на \(event.targetDate)")
-            // TODO: Запланировать/перепланировать уведомление для этого события
-            
-            onSave(event)
-            dismiss()
-        } catch {
-            alertMessage = "Не удалось сохранить событие: \(error.localizedDescription)"
-            showingAlert = true
-            print("Ошибка сохранения события: \(error)")
-        }
-        
-        do {
-            try DatabaseManager.shared.save(event: &event)
-            
-            // --- НОВОЕ: Планируем/перепланируем уведомление ---
+            // ПЛАНИРОВАНИЕ УВЕДОМЛЕНИЯ ПОСЛЕ УСПЕШНОГО СОХРАНЕНИЯ:
+            // Используем event, потому что теперь у него есть id, если это была новая запись.
             NotificationManager.shared.scheduleNotification(for: event)
-            // ---------------------------------------------------
             
             print("Событие сохранено: \(event.name) на \(event.targetDate)")
             
-            onSave(event)
-            dismiss()
+            onSave(event) // Вызываем замыкание для обновления списка
+            dismiss()     // Закрываем модальное окно
         } catch {
             alertMessage = "Не удалось сохранить событие: \(error.localizedDescription)"
             showingAlert = true
