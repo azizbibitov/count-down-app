@@ -9,9 +9,18 @@ import SwiftUI
 
 @main
 struct CountDownAppApp: App {
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-        }
-    }
-}
+    // Инициализируем DatabaseManager, чтобы убедиться, что база данных готова
+     init() {
+         _ = DatabaseManager.shared
+     }
+     
+     var body: some Scene {
+         WindowGroup {
+             CountdownListView()
+                 .onAppear {
+                     // Запрашиваем разрешение на уведомления при запуске приложения
+                     NotificationManager.shared.requestAuthorization()
+                 }
+         }
+     }
+ }
